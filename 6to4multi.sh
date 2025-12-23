@@ -131,7 +131,7 @@ handle_six_to_four() {
     read -p "Select an option (1 or 2): " six_to_four_choice
 
     if [ "$six_to_four_choice" -eq 1 ]; then
-        # Kharej side - FULLY FIXED
+        # Kharej side - FINAL FIXED VERSION
         read -p "Enter the Kharej (outside) IPv4 address: " ipkharej
         echo "How many Iran servers do you want to connect? (1 or 2 for redundancy)"
         read -p "Number (1/2): " num_iran
@@ -144,10 +144,10 @@ handle_six_to_four() {
             read -p "Enter IPv4 address of Iran Server 2: " ipiran2
         fi
 
-        # Build commands in a single heredoc to avoid any concatenation issues
-        commands=$(cat <<EOF
+        # Build the entire command block in ONE heredoc to guarantee correct newlines
+        commands=$(cat <<'EOF'
 # Configuration for Iran Server 1
-ip tunnel add 6to4_To_IR1 mode sit remote $ipiran1 local $ipkharej ttl 255
+ip tunnel add 6to4_To_IR1 mode sit remote REPLACE_IR1 local REPLACE_KH ttl 255
 ip -6 addr add 2010:5a8:2e20:f2e::2/64 dev 6to4_To_IR1
 ip link set 6to4_To_IR1 mtu 1420
 ip link set 6to4_To_IR1 up
@@ -156,15 +156,18 @@ ip -6 tunnel add GRE6Tun_To_IR1 mode ip6gre remote 2010:5a8:2e20:f2e::1 local 20
 ip addr add 121.113.9.2/30 dev GRE6Tun_To_IR1
 ip link set GRE6Tun_To_IR1 mtu 1420
 ip link set GRE6Tun_To_IR1 up
-
 EOF
 )
 
-        if [ "$num_iran" -ge 2 ]; then
-            commands+=$(cat <<EOF
+        # Replace placeholders
+        commands=${commands/REPLACE_KH/$ipkharej}
+        commands=${commands/REPLACE_IR1/$ipiran1}
 
+        if [ "$num_iran" -ge 2 ]; then
+            commands+=$'\n\n'
+            commands+=$(cat <<'EOF'
 # Configuration for Iran Server 2
-ip tunnel add 6to4_To_IR2 mode sit remote $ipiran2 local $ipkharej ttl 255
+ip tunnel add 6to4_To_IR2 mode sit remote REPLACE_IR2 local REPLACE_KH ttl 255
 ip -6 addr add 2010:5a8:2e20:f3e::2/64 dev 6to4_To_IR2
 ip link set 6to4_To_IR2 mtu 1420
 ip link set 6to4_To_IR2 up
@@ -173,13 +176,14 @@ ip -6 tunnel add GRE6Tun_To_IR2 mode ip6gre remote 2010:5a8:2e20:f3e::1 local 20
 ip addr add 121.113.10.2/30 dev GRE6Tun_To_IR2
 ip link set GRE6Tun_To_IR2 mtu 1420
 ip link set GRE6Tun_To_IR2 up
-
 EOF
 )
+            commands=${commands/REPLACE_KH/$ipkharej}
+            commands=${commands/REPLACE_IR2/$ipiran2}
         fi
 
         echo "Applying configuration on Kharej server..."
-        bash -c "$commands"
+        echo "$commands" | bash
         setup_rc_local "$commands"
         echo "Kharej server configured for $num_iran Iran server(s)."
 
@@ -226,7 +230,7 @@ EOF
 )
 
         echo "Applying configuration..."
-        bash -c "$commands"
+        echo "$commands" | bash
         setup_rc_local "$commands"
         echo "Iran Server $iran_number configured successfully!"
     else
@@ -247,7 +251,7 @@ case $server_choice in
         ip link del GRE6Tun_To_IR2 2>/dev/null || true
         ip link del 6to4_To_KH 2>/dev/null || true
         ip link del GRE6Tun_To_KH 2>/dev/null || true
-        # Clean NAT rules
+        # Clean NAT rules (only on Iran side, but safe to run)
         iptables -t nat -F PREROUTING 2>/dev/null
         iptables -t nat -F POSTROUTING 2>/dev/null
         # Reset rc.local
