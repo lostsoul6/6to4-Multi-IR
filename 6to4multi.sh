@@ -47,7 +47,6 @@ optimize() {
     SYSCTL_CONF="/etc/sysctl.d/local.conf"
     TEMP_USER_CONF=$(mktemp)
     TEMP_SYSTEM_CONF=$(mktemp)
-
     add_line_if_not_exists() {
         local file="$1"
         local line="$2"
@@ -67,10 +66,8 @@ optimize() {
             rm "$temp_file"
         fi
     }
-
     add_line_if_not_exists "$USER_CONF" "DefaultLimitNOFILE=1024000" "$TEMP_USER_CONF"
     add_line_if_not_exists "$SYSTEM_CONF" "DefaultLimitNOFILE=1024000" "$TEMP_SYSTEM_CONF"
-
     if [ -f "$LIMITS_CONF" ]; then
         cat <<EOF | tee -a "$LIMITS_CONF" > /dev/null
 * hard nofile 1024000
@@ -80,12 +77,10 @@ root soft nofile 1024000
 EOF
         echo "Added limits to $LIMITS_CONF"
     fi
-
     cat <<EOF | tee "$SYSCTL_CONF" > /dev/null
 fs.file-max = 1024000
 EOF
     echo "Added sysctl settings to $SYSCTL_CONF"
-
     sysctl --system
     echo "Optimization completed."
 }
@@ -136,52 +131,62 @@ handle_six_to_four() {
     read -p "Select an option (1 or 2): " six_to_four_choice
 
     if [ "$six_to_four_choice" -eq 1 ]; then
-        # Kharej side
+        # Kharej side - FIXED with heredoc (recommended method)
         read -p "Enter the Kharej (outside) IPv4 address: " ipkharej
         echo "How many Iran servers do you want to connect? (1 or 2 for redundancy)"
         read -p "Number (1/2): " num_iran
         [[ "$num_iran" != "1" && "$num_iran" != "2" ]] && num_iran=2
 
-        commands=""
-
         if [ "$num_iran" -ge 1 ]; then
             read -p "Enter IPv4 address of Iran Server 1: " ipiran1
-            commands+="ip tunnel add 6to4_To_IR1 mode sit remote $ipiran1 local $ipkharej ttl 255\n"
-            commands+="ip -6 addr add 2010:5a8:2e20:f2e::2/64 dev 6to4_To_IR1\n"
-            commands+="ip link set 6to4_To_IR1 mtu 1420\n"
-            commands+="ip link set 6to4_To_IR1 up\n\n"
-
-            commands+="ip -6 tunnel add GRE6Tun_To_IR1 mode ip6gre remote 2010:5a8:2e20:f2e::1 local 2010:5a8:2e20:f2e::2 ttl 255\n"
-            commands+="ip addr add 121.113.9.2/30 dev GRE6Tun_To_IR1\n"
-            commands+="ip link set GRE6Tun_To_IR1 mtu 1420\n"
-            commands+="ip link set GRE6Tun_To_IR1 up\n\n"
         fi
-
         if [ "$num_iran" -ge 2 ]; then
             read -p "Enter IPv4 address of Iran Server 2: " ipiran2
-            commands+="ip tunnel add 6to4_To_IR2 mode sit remote $ipiran2 local $ipkharej ttl 255\n"
-            commands+="ip -6 addr add 2010:5a8:2e20:f3e::2/64 dev 6to4_To_IR2\n"
-            commands+="ip link set 6to4_To_IR2 mtu 1420\n"
-            commands+="ip link set 6to4_To_IR2 up\n\n"
-
-            commands+="ip -6 tunnel add GRE6Tun_To_IR2 mode ip6gre remote 2010:5a8:2e20:f3e::1 local 2010:5a8:2e20:f3e::2 ttl 255\n"
-            commands+="ip addr add 121.113.10.2/30 dev GRE6Tun_To_IR2\n"
-            commands+="ip link set GRE6Tun_To_IR2 mtu 1420\n"
-            commands+="ip link set GRE6Tun_To_IR2 up\n\n"
         fi
 
+        # Build commands using heredoc - safe and clean
+        commands=$(cat <<EOF
+ip tunnel add 6to4_To_IR1 mode sit remote $ipiran1 local $ipkharej ttl 255
+ip -6 addr add 2010:5a8:2e20:f2e::2/64 dev 6to4_To_IR1
+ip link set 6to4_To_IR1 mtu 1420
+ip link set 6to4_To_IR1 up
+
+ip -6 tunnel add GRE6Tun_To_IR1 mode ip6gre remote 2010:5a8:2e20:f2e::1 local 2010:5a8:2e20:f2e::2 ttl 255
+ip addr add 121.113.9.2/30 dev GRE6Tun_To_IR1
+ip link set GRE6Tun_To_IR1 mtu 1420
+ip link set GRE6Tun_To_IR1 up
+
+EOF
+)
+
+        if [ "$num_iran" -ge 2 ]; then
+            commands+=$(cat <<EOF
+ip tunnel add 6to4_To_IR2 mode sit remote $ipiran2 local $ipkharej ttl 255
+ip -6 addr add 2010:5a8:2e20:f3e::2/64 dev 6to4_To_IR2
+ip link set 6to4_To_IR2 mtu 1420
+ip link set 6to4_To_IR2 up
+
+ip -6 tunnel add GRE6Tun_To_IR2 mode ip6gre remote 2010:5a8:2e20:f3e::1 local 2010:5a8:2e20:f3e::2 ttl 255
+ip addr add 121.113.10.2/30 dev GRE6Tun_To_IR2
+ip link set GRE6Tun_To_IR2 mtu 1420
+ip link set GRE6Tun_To_IR2 up
+
+EOF
+)
+        fi
+
+        echo "Applying configuration on Kharej server..."
         eval "$commands"
         setup_rc_local "$commands"
         echo "Kharej server configured for $num_iran Iran server(s)."
 
     elif [ "$six_to_four_choice" -eq 2 ]; then
-        # Iran side - FIXED VERSION
+        # Iran side
         read -p "Is this Iran Server 1 or 2? (1/2): " iran_number
         if [ "$iran_number" != "1" ] && [ "$iran_number" != "2" ]; then
             echo "Invalid choice. Please run again and select 1 or 2."
             return
         fi
-
         read -p "Enter this Iran server's IPv4 address: " ipiran
         read -p "Enter the Kharej (outside) IPv4 address: " ipkharej
 
@@ -203,18 +208,15 @@ ip tunnel add 6to4_To_KH mode sit remote $ipkharej local $ipiran ttl 255
 ip -6 addr add $local_ipv6/64 dev 6to4_To_KH
 ip link set 6to4_To_KH mtu 1420
 ip link set 6to4_To_KH up
-
-# Now create ip6gre tunnel (requires IPv6 addresses from above)
+# Now create ip6gre tunnel
 ip -6 tunnel add GRE6Tun_To_KH mode ip6gre remote $remote_ipv6 local $local_ipv6 ttl 255
 ip addr add $priv_ip/30 dev GRE6Tun_To_KH
 ip link set GRE6Tun_To_KH mtu 1420
 ip link set GRE6Tun_To_KH up
-
 # Enable forwarding and NAT
 sysctl -w net.ipv4.ip_forward=1
 iptables -t nat -A POSTROUTING -j MASQUERADE
 iptables -t nat -A PREROUTING -j DNAT --to-destination $remote_nat
-
 # Preserve SSH access to this Iran server
 iptables -t nat -A PREROUTING -p tcp --dport 22 -j DNAT --to-destination $priv_ip
 EOF
@@ -242,15 +244,12 @@ case $server_choice in
         ip link del GRE6Tun_To_IR2 2>/dev/null || true
         ip link del 6to4_To_KH 2>/dev/null || true
         ip link del GRE6Tun_To_KH 2>/dev/null || true
-
         # Clean NAT rules
         iptables -t nat -F PREROUTING 2>/dev/null
         iptables -t nat -F POSTROUTING 2>/dev/null
-
         # Reset rc.local
         echo -e '#! /bin/bash\n\nexit 0' > /etc/rc.local
         chmod +x /etc/rc.local
-
         echo "All tunnels, NAT rules, and rc.local have been cleaned."
         ;;
     3)
