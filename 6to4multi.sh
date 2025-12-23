@@ -131,7 +131,7 @@ handle_six_to_four() {
     read -p "Select an option (1 or 2): " six_to_four_choice
 
     if [ "$six_to_four_choice" -eq 1 ]; then
-        # Kharej side - FIXED with heredoc (recommended method)
+        # Kharej side - FULLY FIXED
         read -p "Enter the Kharej (outside) IPv4 address: " ipkharej
         echo "How many Iran servers do you want to connect? (1 or 2 for redundancy)"
         read -p "Number (1/2): " num_iran
@@ -144,8 +144,9 @@ handle_six_to_four() {
             read -p "Enter IPv4 address of Iran Server 2: " ipiran2
         fi
 
-        # Build commands using heredoc - safe and clean
+        # Build commands in a single heredoc to avoid any concatenation issues
         commands=$(cat <<EOF
+# Configuration for Iran Server 1
 ip tunnel add 6to4_To_IR1 mode sit remote $ipiran1 local $ipkharej ttl 255
 ip -6 addr add 2010:5a8:2e20:f2e::2/64 dev 6to4_To_IR1
 ip link set 6to4_To_IR1 mtu 1420
@@ -161,6 +162,8 @@ EOF
 
         if [ "$num_iran" -ge 2 ]; then
             commands+=$(cat <<EOF
+
+# Configuration for Iran Server 2
 ip tunnel add 6to4_To_IR2 mode sit remote $ipiran2 local $ipkharej ttl 255
 ip -6 addr add 2010:5a8:2e20:f3e::2/64 dev 6to4_To_IR2
 ip link set 6to4_To_IR2 mtu 1420
@@ -176,12 +179,12 @@ EOF
         fi
 
         echo "Applying configuration on Kharej server..."
-        eval "$commands"
+        bash -c "$commands"
         setup_rc_local "$commands"
         echo "Kharej server configured for $num_iran Iran server(s)."
 
     elif [ "$six_to_four_choice" -eq 2 ]; then
-        # Iran side
+        # Iran side (unchanged)
         read -p "Is this Iran Server 1 or 2? (1/2): " iran_number
         if [ "$iran_number" != "1" ] && [ "$iran_number" != "2" ]; then
             echo "Invalid choice. Please run again and select 1 or 2."
@@ -223,7 +226,7 @@ EOF
 )
 
         echo "Applying configuration..."
-        eval "$commands"
+        bash -c "$commands"
         setup_rc_local "$commands"
         echo "Iran Server $iran_number configured successfully!"
     else
