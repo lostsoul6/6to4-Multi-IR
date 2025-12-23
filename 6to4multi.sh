@@ -220,11 +220,10 @@ ip -6 tunnel add GRE6Tun_To_KH mode ip6gre remote $remote_ipv6 local $local_ipv6
 ip addr add $priv_ip/30 dev GRE6Tun_To_KH
 ip link set GRE6Tun_To_KH mtu 1420
 ip link set GRE6Tun_To_KH up
-# Enable forwarding and NAT
+# Enable forwarding (already in script)
 sysctl -w net.ipv4.ip_forward=1
-iptables -t nat -A POSTROUTING -j MASQUERADE
-iptables -t nat -A PREROUTING -j DNAT --to-destination $remote_nat
-# Preserve SSH access to this Iran server
+iptables -t nat -A POSTROUTING -s 121.113.0.0/16 -j MASQUERADE   # Adjust if using different private ranges
+iptables -t nat -A PREROUTING ! -i GRE6Tun_To_KH -j DNAT --to-destination $remote_nat
 iptables -t nat -A PREROUTING -p tcp --dport 22 -j DNAT --to-destination $priv_ip
 EOF
 )
